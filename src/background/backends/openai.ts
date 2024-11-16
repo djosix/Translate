@@ -1,26 +1,26 @@
-import { Backend } from "./types";
+import { Backend } from "../types";
 
 const backend: Backend = {
   metadata: {
     name: "OpenAI",
-    configurable: [
+    configSpecs: [
       {
         name: "Model",
         type: "text",
         key: "model",
-        value: "gpt-4o-mini",
+        defaultValue: "gpt-4o-mini",
       },
       {
         name: "API Key",
         type: "password",
         key: "apiKey",
-        value: "",
+        defaultValue: "",
       },
       {
         name: "Prompt",
         type: "text",
         key: "prompt",
-        value:
+        defaultValue:
           "You are a professional translator. " +
           "Translate any text to LANGUAGE. " +
           "The translation must be native and fluent. " +
@@ -29,7 +29,6 @@ const backend: Backend = {
       },
     ],
   },
-
   translate: async (text, targetLanguage, settings) => {
     const future = fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

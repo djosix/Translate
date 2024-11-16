@@ -1,12 +1,22 @@
 import { deepAssign } from "./utils";
-import { Settings } from "./types";
+import { backends } from "./backends";
+import { BackendSettings, Settings } from "./types";
 
 const defaultSettings: Settings = {
-  translator: {
-    backend: "google",
-    language: "zh-hant", // supported by all backends
-    backendSettings: {},
-  },
+  targetLanguage: "en", // supported by all backends
+  currentBackend: backends.keys().next().value!,
+  backendSettings: Object.fromEntries(
+    Array.from(backends.entries()).map(([key, backend]) => [
+      key,
+      backend.metadata.configSpecs.reduce(
+        (settings, configSpec) => {
+          settings[configSpec.key] = configSpec.defaultValue;
+          return settings;
+        },
+        <BackendSettings>{},
+      ),
+    ]),
+  ),
   enableTooltip: true,
 };
 

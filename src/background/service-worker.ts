@@ -1,18 +1,18 @@
-import { createTranslator } from "./translator";
+import { translate } from "./translate";
 import { createCache } from "./cache";
 import { loadSettings, saveSettings } from "./settings";
 import { deepAssign } from "./utils";
-import { TranslatorSettings, Request } from "./types";
+import { Settings, Request } from "./types";
+import { getBackendSpecs } from "./backends";
 
-const translator = createTranslator();
 const cache = createCache(256);
 
-async function cachedTranslate(text: string, settings: TranslatorSettings) {
+async function translateWithCache(text: string, settings: Settings) {
   text = text.trim();
   const key = JSON.stringify([
-    settings.backend,
-    settings.backendSettings[settings.backend],
-    settings.language,
+    settings.currentBackend,
+    settings.backendSettings[settings.currentBackend],
+    settings.targetLanguage,
     text,
   ]);
   {
@@ -22,7 +22,7 @@ async function cachedTranslate(text: string, settings: TranslatorSettings) {
       return cached;
     }
   }
-  const result = await translator.translate(text, settings);
+  const result = await translate(text, settings);
   if (result !== null) {
     cache.set(key, result);
     console.log("Translated:", { key, result });
@@ -41,7 +41,7 @@ chrome.runtime.onMessage.addListener(
     switch (request.action) {
       case "translate": {
         loadSettings().then((settings) => {
-          cachedTranslate(request.text, settings.translator)
+          translateWithCache(request.text, settings)
             .then((result) => {
               sendResponse({ result });
             })
@@ -55,10 +55,9 @@ chrome.runtime.onMessage.addListener(
         });
         return true;
       }
-      case "backends": {
-        sendResponse({ backends: translator.getBackends() });
+      case "backends":
+        sendResponse({ backends: getBackendSpecs() });
         return false;
-      }
       case "settings": {
         const shouldUpdate =
           typeof request.settings === "object" &&
@@ -73,7 +72,7 @@ chrome.runtime.onMessage.addListener(
         return true;
       }
       default: {
-          return false;
+        return false;
       }
     }
   },
