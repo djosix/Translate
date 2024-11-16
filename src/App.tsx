@@ -1,10 +1,10 @@
 import "./App.css";
-import Translate from "./components/Translates/Translate";
+import Popup from "./components/Popup";
 
 function App() {
   return (
     <div className="w-96">
-      <Translate />
+      <Popup />
     </div>
   );
 }
