@@ -1,22 +1,9 @@
 import { background } from "../utils/interaction";
 import { Settings } from "../background/types";
-
-interface Selection {
-  text: string;
-  rect: DOMRect | null;
-  offset: { x: number; y: number };
-}
-
-interface Placement {
-  x: number;
-  y: number;
-  upwards: boolean;
-}
-
-interface Tooltip {
-  hide: () => void;
-  cleanup: () => void;
-}
+import { createRoot } from "react-dom/client";
+import React from "react";
+import Tooltip from "./Tooltip";
+import { MouseSelection, Selection, TooltipHandle } from "./types";
 
 function getTextSelection(): Selection {
   // Current page scroll offset
@@ -77,15 +64,9 @@ function getTextSelection(): Selection {
   };
 }
 
-function setupTooltip(translateFn: (text: string) => Promise<string>): Tooltip {
-  // Constants
-  const fontFamily = "Arial, sans-serif";
-
-  // States
-  let currentButton: HTMLButtonElement | null = null;
-  let currentSelection: Selection | null = null;
-  let currentTooltip: HTMLDivElement | null = null;
-
+function setupTooltip(
+  translateFn: (text: string) => Promise<string>,
+): TooltipHandle {
   // Create a shadow DOM container to isolate page styles
   const container = (function () {
     const container = document.createElement("div");
@@ -94,281 +75,109 @@ function setupTooltip(translateFn: (text: string) => Promise<string>): Tooltip {
     container.style.visibility = "hidden";
     return container;
   })();
-  const shadow = container.attachShadow({ mode: "open" });
-  shadow.appendChild(
+
+  const shadowRoot = container.attachShadow({ mode: "open" });
+
+  // Inject styles into the shadow DOM
+  shadowRoot.appendChild(
     (function () {
-      // Reset all styles that the shadow DOM might inherit to their initial values
-      const shadowCss = [
-        ["font-family", "initial"],
-        ["font-size", "initial"],
-        ["font-style", "initial"],
-        ["font-variant", "initial"],
-        ["font-weight", "initial"],
-        ["letter-spacing", "initial"],
-        ["word-spacing", "initial"],
-        ["line-height", "initial"],
-        ["color", "initial"],
-        ["text-align", "initial"],
-        ["text-indent", "initial"],
-        ["text-transform", "initial"],
-        ["white-space", "initial"],
-        ["direction", "initial"],
-        ["unicode-bidi", "initial"],
-        ["list-style", "initial"],
-        ["list-style-image", "initial"],
-        ["list-style-position", "initial"],
-        ["list-style-type", "initial"],
-        ["border-collapse", "initial"],
-        ["border-spacing", "initial"],
-        ["caption-side", "initial"],
-        ["empty-cells", "initial"],
-        ["quotes", "initial"],
-      ];
       const style = document.createElement("style");
-      style.innerHTML =
-        ":host{" +
-        shadowCss.map(([key, value]) => `${key}:${value};`).join("") +
-        "}";
+      style.innerHTML = [
+        // Reset all styles that the shadow DOM might inherit to their initial values
+        `:host {
+          font-family: initial;
+          font-size: initial;
+          font-style: initial;
+          font-variant: initial;
+          font-weight: initial;
+          letter-spacing: initial;
+          word-spacing: initial;
+          line-height: initial;
+          color: initial;
+          text-align: initial;
+          text-indent: initial;
+          text-transform: initial;
+          white-space: initial;
+          direction: initial;
+          unicode-bidi: initial;
+          list-style: initial;
+          list-style-image: initial;
+          list-style-position: initial;
+          list-style-type: initial;
+          border-collapse: initial;
+          border-spacing: initial;
+          caption-side: initial;
+          empty-cells: initial;
+          quotes: initial;
+        }`,
+        // Add a CSS animation for the loading spinner
+        `@keyframes spin {
+          0% {
+            transform: rotate(0deg);
+          }
+          100% {
+            transform: rotate(360deg);
+          }
+        }`,
+      ]
+        .join("")
+        .replace(/\s+/g, " ");
       return style;
     })(),
   );
+
   document.body.appendChild(container);
 
-  function showButton(placement: Placement) {
-    removeButton();
-
-    const { x, y, upwards } = placement;
-    const width = 26,
-      height = 26;
-    const buttonX = x - width / 2;
-    const buttonY = upwards ? y - height : y;
-    const defaultBoxShadow = "0px 2px 4px rgba(0, 0, 0, 0.2)";
-
-    currentButton = document.createElement("button");
-    currentButton.type = "button";
-    currentButton.innerText = "Tr";
-    currentButton.style.width = `${width}px`;
-    currentButton.style.height = `${height}px`;
-    currentButton.style.borderRadius = "5px";
-    currentButton.style.backgroundColor = "#fafafa";
-    currentButton.style.position = "fixed";
-    currentButton.style.left = `${buttonX}px`;
-    currentButton.style.top = `${buttonY}px`;
-    currentButton.style.boxShadow = defaultBoxShadow;
-    currentButton.style.color = "#888";
-    currentButton.style.fontSize = "12px";
-    currentButton.style.cursor = "pointer";
-    currentButton.style.textAlign = "center";
-    currentButton.style.lineHeight = `${height}px`;
-    currentButton.style.zIndex = "2147483647";
-    currentButton.style.boxSizing = "border-box";
-    currentButton.style.fontFamily = fontFamily;
-    currentButton.style.padding = "0";
-    currentButton.style.border = "0";
-    currentButton.style.visibility = "visible";
-
-    currentButton.addEventListener("mouseenter", () => {
-      if (currentButton) {
-        currentButton.style.boxShadow = "0px 3px 6px rgba(0, 0, 0, 0.2)";
-        currentButton.style.backgroundColor = "#fefefe";
-      }
-    });
-
-    currentButton.addEventListener("mouseleave", () => {
-      if (currentButton) {
-        currentButton.style.boxShadow = defaultBoxShadow;
-        currentButton.style.backgroundColor = "#fafafa";
-      }
-    });
-
-    currentButton.addEventListener("click", (e) => {
-      if (currentButton) {
-        handleButtonClick(currentButton, e);
-      }
-    });
-
-    shadow.appendChild(currentButton);
+  interface TooltipMethods {
+    setMouseSelection: (selection: Selection, event: MouseEvent) => void;
+    setTranslationResult: (text: string) => void;
+    reset: () => void;
   }
 
-  function removeButton() {
-    if (currentButton) {
-      currentButton.remove();
-      currentButton = null;
-    }
-  }
-
-  async function handleButtonClick(button: HTMLButtonElement, e: MouseEvent) {
-    if (!currentSelection) {
-      return;
-    }
-    setButtonLoading(button);
-    try {
-      const result = await translateFn(currentSelection.text);
-      let tooltipX = e.pageX,
-        tooltipY = e.pageY,
-        tooltipUpwards = false;
-      {
-        const s = currentSelection;
-        if (s.rect !== null) {
-          tooltipUpwards =
-            Math.abs(e.pageY - (s.rect.top + s.offset.y)) <
-            Math.abs(e.pageY - (s.rect.bottom + s.offset.y));
-          tooltipX = (s.rect.left + s.rect.right) / 2 + s.offset.x;
-          tooltipY = (tooltipUpwards ? s.rect.top : s.rect.bottom) + s.offset.y;
-        }
-      }
-      showTooltip(
-        {
-          x: tooltipX,
-          y: tooltipY,
-          upwards: tooltipUpwards,
-        },
-        result,
-      );
-    } catch (error) {
-      alert("Failed to translate the selected text.\n" + error);
-    } finally {
-      removeButton();
-    }
-  }
-
-  function setButtonLoading(button: HTMLButtonElement) {
-    const loader = document.createElement("div");
-    loader.style.border = "3px solid #f0f0f0";
-    loader.style.borderRadius = "50%";
-    loader.style.borderTop = "3px solid #3498db";
-    loader.style.width = "16px";
-    loader.style.height = "16px";
-    loader.style.boxSizing = "border-box";
-    loader.style.margin = "auto";
-    loader.style.padding = "0";
-    loader.style.animation = "spin 0.5s linear infinite";
-    const styleSheet = document.createElement("style");
-    styleSheet.innerText = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
-    loader.appendChild(styleSheet);
-    button.innerHTML = "";
-    button.appendChild(loader);
-    button.setAttribute("disabled", "disabled");
-  }
-
-  function showTooltip(placement: Placement, result: string) {
-    removeTooltip();
-    const { x, y, upwards } = placement;
-    currentTooltip = document.createElement("div");
-    currentTooltip.style.width = "auto";
-    currentTooltip.style.maxWidth = "60vw";
-    currentTooltip.style.position = "absolute";
-    currentTooltip.style.backgroundColor = "white";
-    currentTooltip.style.color = "black";
-    currentTooltip.style.padding = "10px 14px";
-    currentTooltip.style.borderRadius = "6px";
-    currentTooltip.style.boxShadow = "0px 4px 8px rgba(0, 0, 0, 0.4)";
-    currentTooltip.style.zIndex = "2147483647";
-    currentTooltip.style.transition = "opacity 0.5s ease";
-    currentTooltip.style.fontSize = "14px";
-    currentTooltip.style.fontFamily = "Arial, sans-serif";
-    currentTooltip.style.opacity = "0"; // Hide initially
-    currentTooltip.style.visibility = "visible";
-    currentTooltip.appendChild(
-      (function () {
-        const div = document.createElement("div");
-        div.style.fontSize = "12px";
-        div.style.fontFamily = fontFamily;
-        div.style.color = "#888";
-        div.style.display = "flex";
-        div.style.justifyContent = "space-between";
-        div.style.userSelect = "none";
-        div.style.marginBottom = "8px";
-        const textDiv = document.createElement("div");
-        textDiv.innerText = "Translate";
-        textDiv.style.fontSize = "12px";
-        textDiv.style.marginRight = "16px";
-        textDiv.style.fontFamily = fontFamily;
-        div.appendChild(textDiv);
-        const closeDiv = document.createElement("div");
-        closeDiv.innerHTML = "&times;";
-        closeDiv.style.marginLeft = "auto";
-        closeDiv.style.cursor = "pointer";
-        closeDiv.style.fontSize = "12px";
-        closeDiv.style.width = "12px";
-        closeDiv.style.height = "12px";
-        closeDiv.style.borderRadius = "10%";
-        closeDiv.style.justifyContent = "center";
-        closeDiv.style.alignItems = "center";
-        closeDiv.style.textAlign = "center";
-        closeDiv.addEventListener("mouseover", () => {
-          closeDiv.style.backgroundColor = "#dedede";
-        });
-        closeDiv.addEventListener("mouseleave", () => {
-          closeDiv.style.backgroundColor = "inherit";
-        });
-        closeDiv.addEventListener("mousedown", () => {
-          closeDiv.style.backgroundColor = "#c0c0c0";
-        });
-        closeDiv.addEventListener("mouseup", () => {
-          closeDiv.style.backgroundColor = "#dedede";
-        });
-        closeDiv.addEventListener("click", () => {
-          removeTooltip();
-        });
-        div.appendChild(closeDiv);
-        return div;
-      })(),
+  const TooltipWrapper = React.forwardRef((_, ref) => {
+    const [mouseSelection, setMouseSelection] =
+      React.useState<MouseSelection | null>(null);
+    const [translatedText, setTranslatedText] = React.useState<string | null>(
+      null,
     );
-    currentTooltip.appendChild(
-      (function () {
-        const div = document.createElement("div");
-        div.style.fontSize = "14px";
-        div.style.fontFamily = fontFamily;
-        div.style.overflow = "scroll";
-        div.style.maxHeight = "50vh";
-        div.innerText = result;
-        return div;
-      })(),
-    );
-    // Calculate page dimensions to place the tooltip within the page
-    const maxLeft = 0 + 4,
-      maxRight = document.documentElement.scrollWidth - 4,
-      maxTop = 0 + 4,
-      maxBottom = document.documentElement.scrollHeight - 4;
-    // Add the tooltip to the page, this may change page dimensions
-    shadow.appendChild(currentTooltip);
-    // Adjust the tooltip aspect ratio
-    {
-      const rect = currentTooltip.getBoundingClientRect();
-      const aspectRatio = 2;
-      const newWidth =
-        Math.sqrt((rect.width * rect.height) / aspectRatio) * aspectRatio;
-      currentTooltip.style.maxWidth = `${newWidth}px`;
-    }
-    // Calculate the tooltip position and avoid overflowing the page
-    {
-      const rect = currentTooltip.getBoundingClientRect();
-      let tooltipX = x - rect.width / 2;
-      let tooltipY = upwards ? y - rect.height - 2 : y + 2;
-      tooltipX = Math.max(maxLeft, tooltipX);
-      tooltipX = Math.min(maxRight - rect.width, tooltipX);
-      tooltipY = Math.max(maxTop, tooltipY);
-      tooltipY = Math.min(maxBottom - rect.height, tooltipY);
-      currentTooltip.style.left = `${tooltipX}px`;
-      currentTooltip.style.top = `${tooltipY}px`;
-    }
-    // Show the tooltip
-    currentTooltip.style.opacity = "1";
-  }
 
-  function removeTooltip() {
-    if (!currentTooltip) {
-      return;
-    }
-    currentTooltip.remove();
-    currentTooltip = null;
-  }
+    const reset = () => {
+      setMouseSelection(null);
+      setTranslatedText(null);
+    };
+
+    React.useImperativeHandle<unknown, TooltipMethods>(ref, () => ({
+      setMouseSelection: (selection: Selection, event: MouseEvent) => {
+        setMouseSelection({ selection, event });
+      },
+      setTranslationResult: (text: string) => {
+        setTranslatedText(text);
+      },
+      reset,
+    }));
+
+    return (
+      <Tooltip
+        mouseSelection={mouseSelection}
+        translatedText={translatedText}
+        onButtonClick={async () => {
+          const result = await translateFn(mouseSelection!.selection.text);
+          setTranslatedText(result);
+        }}
+        onDialogClose={() => reset()}
+      />
+    );
+  });
+
+  const tooltipRef = React.createRef<TooltipMethods>();
+
+  const reactRoot = createRoot(shadowRoot);
+  reactRoot.render(<TooltipWrapper ref={tooltipRef} />);
 
   function isInsideShadow(e: MouseEvent) {
     return e
       .composedPath()
-      .some((node) => (node as Element).shadowRoot === shadow);
+      .some((node) => (node as Element).shadowRoot === shadowRoot);
   }
 
   let lastShowButtonTime = 0;
@@ -380,43 +189,16 @@ function setupTooltip(translateFn: (text: string) => Promise<string>): Tooltip {
     if (Date.now() - lastShowButtonTime < 100) {
       return;
     }
-    if (currentButton) {
-      if (currentButton.contains(e.target as Node)) {
-        return;
-      }
-      removeButton();
-    }
-    if (currentTooltip) {
-      if (currentTooltip.contains(e.target as Node)) {
-        return;
-      }
-      removeTooltip();
-    }
 
     // Wait for the selection to be updated
     await new Promise((resolve) => setTimeout(resolve, 1));
 
-    currentSelection = getTextSelection();
-    if (currentSelection.text.length === 0) {
+    const selection = getTextSelection();
+    if (selection.text.length === 0) {
       return;
     }
 
-    let buttonY = e.pageY,
-      buttonUpwards = false;
-    {
-      const s = currentSelection;
-      if (s.rect !== null) {
-        buttonUpwards =
-          Math.abs(e.pageY - s.rect.top - s.offset.y) <
-          Math.abs(e.pageY - s.rect.bottom - s.offset.y);
-        buttonY = buttonUpwards ? s.rect.top - 1 : s.rect.bottom + 1;
-      }
-    }
-    showButton({
-      x: e.pageX,
-      y: buttonY,
-      upwards: buttonUpwards,
-    });
+    tooltipRef.current!.setMouseSelection(selection, e);
 
     lastShowButtonTime = Date.now();
   }
@@ -425,29 +207,24 @@ function setupTooltip(translateFn: (text: string) => Promise<string>): Tooltip {
     if (isInsideShadow(e)) {
       return;
     }
-    if (currentButton && !currentButton.contains(e.target as Node)) {
-      currentButton.remove();
-      currentButton = null;
-    }
+    tooltipRef.current!.reset();
   }
 
   document.addEventListener("mouseup", documentMouseUpHandler);
   document.addEventListener("mousedown", documentMouseDownHandler);
 
-  function hide() {
-    removeButton();
-    removeTooltip();
-  }
+  return {
+    hide() {
+      tooltipRef.current!.reset();
+    },
+    cleanup() {
+      document.removeEventListener("mouseup", documentMouseUpHandler);
+      document.removeEventListener("mousedown", documentMouseDownHandler);
 
-  function cleanup() {
-    document.removeEventListener("mouseup", documentMouseUpHandler);
-    document.removeEventListener("mousedown", documentMouseDownHandler);
-    removeButton();
-    removeTooltip();
-    container.remove();
-  }
-
-  return { hide, cleanup };
+      reactRoot.unmount();
+      container.remove();
+    },
+  };
 }
 
 const translate = async (text: string) => {
@@ -457,7 +234,7 @@ const translate = async (text: string) => {
   return response.result;
 };
 
-let tooltip: Tooltip | null = null;
+let tooltip: TooltipHandle | null = null;
 
 function enableTooltip() {
   if (!tooltip) {
