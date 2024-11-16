@@ -1,12 +1,39 @@
 import { useEffect, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
+import { createTranslator } from "../../background/translator";
+import { loadSettings } from "../../background/settings";
+import { background } from "../../utils/interaction";
+
+const { translate, getBackends } = createTranslator();
 
 const Translate: React.FC = () => {
+  const backends = getBackends();
   const [text, setText] = useState<string>("");
+  const [translated, setTranslated] = useState<string>("");
+  const [selectedBackend, setSelectedBackend] = useState<(typeof backends)[0]>(
+    backends[0],
+  );
   const debouncedText = useDebounce(text, 500);
 
   useEffect(() => {
-    console.log(debouncedText);
+    background({
+      action: "settings",
+      settings: {
+        translator: {
+          backend: selectedBackend,
+        },
+      },
+    });
+  }, [selectedBackend]);
+
+  useEffect(() => {
+    const callback = async () => {
+      const settings = await loadSettings();
+      const text = await translate(debouncedText, settings.translator);
+
+      if (text !== null) setTranslated(text);
+    };
+    callback();
   }, [debouncedText]);
 
   return (
@@ -15,14 +42,30 @@ const Translate: React.FC = () => {
         <h1 className="text-xl">Translate</h1>
       </section>
       <section className="flex justify-between w-full">
-        <select name="translator">
-          <option value="google">Google</option>
-          <option value="yandex">Yandex</option>
-          <option value="bing">Bing</option>
+        <select
+          name="translator"
+          value={selectedBackend.key}
+          onChange={(e) =>
+            setSelectedBackend(backends.find((b) => b.key === e.target.value)!)
+          }
+        >
+          {backends.map((backend) => (
+            <option key={backend.key} value={backend.key}>
+              {backend.name}
+            </option>
+          ))}
         </select>
-        <select name="language">
-          <option value="en">English</option>\
-        </select>
+        {selectedBackend.languages ? (
+          <select>
+            {Object.entries(selectedBackend.languages).map(([name, code]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input></input>
+        )}
       </section>
       <section>
         <textarea
@@ -33,7 +76,7 @@ const Translate: React.FC = () => {
         />
       </section>
       <section>
-        <textarea className="w-full" name="dst" />
+        <textarea value={translated} className="w-full" name="dst" />
       </section>
     </main>
   );

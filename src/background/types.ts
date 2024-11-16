@@ -1,11 +1,7 @@
 export interface TranslatorSettings {
-  language: string;
   backend: string;
-  backendSettings: {
-    [name: string]: {
-      [field: string]: string;
-    };
-  };
+  language: string;
+  [key: string]: any; // backend specific settings
 }
 
 export interface Settings {
