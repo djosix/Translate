@@ -8,7 +8,7 @@
   },
   "permissions": ["storage", "scripting"],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; obcontent_scriptsject-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "content_scripts": [
     {
