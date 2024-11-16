@@ -7,13 +7,8 @@
     "default_popup": "index.html"
   },
   "permissions": ["storage", "scripting"],
-  "content_scripts": [
-    {
-      "js": ["src/content/content.ts"]
-    }
-  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; obcontent_scriptsject-src 'self'"
   },
   "background": {
     "service_worker": "src/background/service-worker.ts"
