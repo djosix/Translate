@@ -12,7 +12,7 @@ const backend: Backend = {
             },
         ],
     },
-    translate: async (text: string, targetLanguage: string, settings: {key: string}) => {
+    translate: async (text: string, targetLanguage: string, settings) => {
         const future = fetch(
             "https://translate-pa.googleapis.com/v1/translate?" + [
                 "params.client=gtx",

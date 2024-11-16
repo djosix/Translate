@@ -11,11 +11,11 @@ export interface Backend {
   translate: (
     text: string,
     targetLanguage: string,
-    settings: any,
+    settings: BackendSettings,
   ) => Promise<string>;
   languages?: { [key: string]: string };
 }
 
 export interface BackendSettings {
-  [key: string]: any;
+  [key: string]: string;
 }

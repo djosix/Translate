@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function deepAssign(target: any, ...sources: object[]): object {
   if (!target || typeof target !== "object") {
     return target;

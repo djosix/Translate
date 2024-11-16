@@ -12,7 +12,7 @@ const backend: Backend = {
       },
     ],
   },
-  translate: async (text, targetLanguage, settings: { authKey: string }) => {
+  translate: async (text, targetLanguage, settings) => {
     // https://developers.deepl.com/docs/resources/supported-languages
     const future = fetch("https://api-free.deepl.com/v2/translate", {
       method: "POST",
