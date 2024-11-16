@@ -10,6 +10,12 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; obcontent_scriptsject-src 'self'"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.tsx"]
+    }
+  ],
   "background": {
     "service_worker": "src/background/service-worker.ts"
   }
