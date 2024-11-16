@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import useDebounce from "../../hooks/useDebounce";
-import { createTranslator } from "../../background/translator";
+import { translate } from "../../background/translate";
+import { getBackendSpecs } from "../../background/backends";
 import { loadSettings } from "../../background/settings";
+import { BackendSpec } from "../../background/types";
 import { background } from "../../utils/interaction";
 
-const { translate, getBackends } = createTranslator();
-
 const Translate: React.FC = () => {
-  const backends = getBackends();
+  const backendSpecs = getBackendSpecs();
   const [text, setText] = useState<string>("");
   const [translated, setTranslated] = useState<string>("");
-  const [selectedBackend, setSelectedBackend] = useState<(typeof backends)[0]>(
-    backends[0],
+  const [selectedBackendSpec, setSelectedBackendSpec] = useState<BackendSpec>(
+    backendSpecs[0],
   );
   const debouncedText = useDebounce(text, 500);
 
@@ -19,17 +19,15 @@ const Translate: React.FC = () => {
     background({
       action: "settings",
       settings: {
-        translator: {
-          backend: selectedBackend,
-        },
+        currentBackend: selectedBackendSpec.key,
       },
     });
-  }, [selectedBackend]);
+  }, [selectedBackendSpec]);
 
   useEffect(() => {
     const callback = async () => {
       const settings = await loadSettings();
-      const text = await translate(debouncedText, settings.translator);
+      const text = await translate(debouncedText, settings);
 
       if (text !== null) setTranslated(text);
     };
@@ -44,20 +42,22 @@ const Translate: React.FC = () => {
       <section className="flex justify-between w-full">
         <select
           name="translator"
-          value={selectedBackend.key}
+          value={selectedBackendSpec.key}
           onChange={(e) =>
-            setSelectedBackend(backends.find((b) => b.key === e.target.value)!)
+            setSelectedBackendSpec(
+              backendSpecs.find((b) => b.key === e.target.value)!,
+            )
           }
         >
-          {backends.map((backend) => (
+          {backendSpecs.map((backend) => (
             <option key={backend.key} value={backend.key}>
               {backend.name}
             </option>
           ))}
         </select>
-        {selectedBackend.languages ? (
+        {selectedBackendSpec.languageCodes ? (
           <select>
-            {Object.entries(selectedBackend.languages).map(([name, code]) => (
+            {Array.from(selectedBackendSpec.languageCodes, (name, code) => (
               <option key={code} value={code}>
                 {name}
               </option>
