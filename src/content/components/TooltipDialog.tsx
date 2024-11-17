@@ -11,48 +11,62 @@ export default function TooltipDialog({
   translatedText: string;
   onDialogClose: () => void;
 }) {
-  const placement = computeDialogPlacement(mouseSelection);
-
-  const [position, setPosition] = useState({ left: "initial", top: "initial" });
+  const [layout, setLayout] = useState({
+    width: "auto",
+    left: "initial",
+    top: "initial",
+  });
   const [isReady, setIsReady] = useState(false);
+  const [closeButtonState, setCloseButtonState] = useState(0);
 
   const ref = useRef<HTMLDivElement>(null);
 
-  // Apply placement after the width and height are calculated
-  setTimeout(async () => {
-    if (isReady || !ref.current) {
+  // Calculate the dialog dimensions and position
+  setTimeout(() => {
+    if (!ref.current || isReady) {
       return;
     }
-    const [left, top] = (() => {
+    const newLayout = { ...layout };
+    // Adjust the aspect ratio based on the text content
+    for (let i = 0; i < 5; i++) {
       const rect = ref.current.getBoundingClientRect();
-      const bounds = getViewportBounds(4);
-      const tooltipX = clamp(
+      if (rect.width < 3 * rect.height) {
+        break;
+      }
+      newLayout.width = `${rect.width * 0.8}px`;
+      ref.current.style.width = newLayout.width;
+    }
+    // Position the dialog based on the dimensions and the mouse selection
+    {
+      const placement = computeDialogPlacement(mouseSelection);
+      const rect = ref.current.getBoundingClientRect();
+      const bounds = getViewportBounds(6);
+      const dialogX = clamp(
         placement.x - rect.width / 2,
         bounds.maxLeft,
         bounds.maxRight - rect.width,
       );
-      const tooltipY = clamp(
+      const dialogY = clamp(
         placement.upwards ? placement.y - rect.height - 2 : placement.y + 2,
         bounds.maxTop,
         bounds.maxBottom - rect.height,
       );
-      return [`${tooltipX}px`, `${tooltipY}px`];
-    })();
-    setPosition({ left, top });
+      newLayout.left = `${dialogX}px`;
+      newLayout.top = `${dialogY}px`;
+    }
+    setLayout(newLayout);
     setIsReady(true);
-  }, 1);
-
-  const [closeButtonState, setCloseButtonState] = useState(0);
+  }, 0);
 
   return (
     <div
       ref={ref}
       style={{
-        width: "auto",
-        maxWidth: "60vw",
+        width: layout.width,
+        maxWidth: "80vw",
         position: "absolute",
-        left: position.left,
-        top: position.top,
+        left: layout.left,
+        top: layout.top,
         backgroundColor: "white",
         color: "black",
         padding: "10px 14px",
