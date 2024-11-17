@@ -120,18 +120,13 @@ export function createTooltip(
       .some((node) => (node as Element).shadowRoot === shadowRoot);
   }
 
-  let lastShowButtonTime = 0;
-
   async function documentMouseUpHandler(e: MouseEvent) {
     if (isInsideShadow(e)) {
       return;
     }
-    if (Date.now() - lastShowButtonTime < 100) {
-      return;
-    }
 
     // Wait for the selection to be updated
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     const selection = getTextSelection();
     if (selection.text.length === 0) {
@@ -139,8 +134,6 @@ export function createTooltip(
     }
 
     tooltipRef.current!.setMouseSelection(selection, e);
-
-    lastShowButtonTime = Date.now();
   }
 
   function documentMouseDownHandler(e: MouseEvent) {
