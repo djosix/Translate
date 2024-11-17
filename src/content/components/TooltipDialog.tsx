@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { getViewportBounds, clamp } from "../utils";
 import { MouseSelection, Placement } from "../types";
 
@@ -22,19 +22,19 @@ export default function TooltipDialog({
   const ref = useRef<HTMLDivElement>(null);
 
   // Calculate the dialog dimensions and position
-  setTimeout(() => {
-    if (!ref.current || isReady) {
+  useEffect(() => {
+    if (!ref.current) {
       return;
     }
-    const newLayout = { ...layout };
     // Adjust the aspect ratio based on the text content
     for (let i = 0; i < 5; i++) {
       const rect = ref.current.getBoundingClientRect();
       if (rect.width < 3 * rect.height) {
         break;
       }
-      newLayout.width = `${rect.width * 0.8}px`;
-      ref.current.style.width = newLayout.width;
+      const newWidth = `${rect.width * 0.8}px`;
+      ref.current.style.width = newWidth; // update dimensions immediately
+      setLayout((o) => ({ ...o, width: newWidth }));
     }
     // Position the dialog based on the dimensions and the mouse selection
     {
@@ -51,12 +51,10 @@ export default function TooltipDialog({
         bounds.maxTop,
         bounds.maxBottom - rect.height,
       );
-      newLayout.left = `${dialogX}px`;
-      newLayout.top = `${dialogY}px`;
+      setLayout((o) => ({ ...o, left: `${dialogX}px`, top: `${dialogY}px` }));
     }
-    setLayout(newLayout);
     setIsReady(true);
-  }, 0);
+  }, [mouseSelection, translatedText]);
 
   return (
     <div
