@@ -1,4 +1,4 @@
-import { useState, createRef } from "react";
+import { useState, useRef } from "react";
 import { getViewportBounds, clamp } from "../utils";
 import { MouseSelection, Placement } from "../types";
 
@@ -16,7 +16,7 @@ export default function TooltipDialog({
   const [position, setPosition] = useState({ left: "initial", top: "initial" });
   const [isReady, setIsReady] = useState(false);
 
-  const ref = createRef<HTMLDivElement>();
+  const ref = useRef<HTMLDivElement>(null);
 
   // Apply placement after the width and height are calculated
   setTimeout(async () => {
