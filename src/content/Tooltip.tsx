@@ -1,304 +1,168 @@
-import { Placement, MouseSelection } from "./types";
-import { useState, createRef } from "react";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import Tooltip from "./components/Tooltip";
+import { TooltipHandle, MouseSelection, Selection } from "./types";
+import { getTextSelection } from "./utils";
 
-export default function Tooltip({
-  mouseSelection,
-  translatedText,
-  onButtonClick,
-  onDialogClose,
-}: {
-  mouseSelection: MouseSelection | null;
-  translatedText: string | null;
-  onButtonClick: () => void;
-  onDialogClose: () => void;
-}) {
-  if (!mouseSelection) {
-    return null;
+export function createTooltip(
+  translateFn: (text: string) => Promise<string>,
+): TooltipHandle {
+  // Create a shadow DOM container to isolate page styles
+  const container = (function () {
+    const container = document.createElement("div");
+    container.style.width = "0";
+    container.style.height = "0";
+    container.style.visibility = "hidden";
+    return container;
+  })();
+
+  const shadowRoot = container.attachShadow({ mode: "open" });
+
+  // Inject styles into the shadow DOM
+  shadowRoot.appendChild(
+    (function () {
+      const style = document.createElement("style");
+      style.innerHTML = [
+        // Reset all styles that the shadow DOM might inherit to their initial values
+        `:host {
+            font-family: initial;
+            font-size: initial;
+            font-style: initial;
+            font-variant: initial;
+            font-weight: initial;
+            letter-spacing: initial;
+            word-spacing: initial;
+            line-height: initial;
+            color: initial;
+            text-align: initial;
+            text-indent: initial;
+            text-transform: initial;
+            white-space: initial;
+            direction: initial;
+            unicode-bidi: initial;
+            list-style: initial;
+            list-style-image: initial;
+            list-style-position: initial;
+            list-style-type: initial;
+            border-collapse: initial;
+            border-spacing: initial;
+            caption-side: initial;
+            empty-cells: initial;
+            quotes: initial;
+          }`,
+        // Add a CSS animation for the loading spinner
+        `@keyframes spin {
+            0% {
+              transform: rotate(0deg);
+            }
+            100% {
+              transform: rotate(360deg);
+            }
+          }`,
+      ]
+        .join("")
+        .replace(/\s+/g, " ");
+      return style;
+    })(),
+  );
+
+  document.body.appendChild(container);
+
+  interface TooltipMethods {
+    setMouseSelection: (selection: Selection, event: MouseEvent) => void;
+    setTranslationResult: (text: string) => void;
+    reset: () => void;
   }
 
-  if (translatedText !== null) {
+  const TooltipWrapper = React.forwardRef((_, ref) => {
+    const [mouseSelection, setMouseSelection] =
+      React.useState<MouseSelection | null>(null);
+    const [translatedText, setTranslatedText] = React.useState<string | null>(
+      null,
+    );
+
+    const reset = () => {
+      setMouseSelection(null);
+      setTranslatedText(null);
+    };
+
+    React.useImperativeHandle<unknown, TooltipMethods>(ref, () => ({
+      setMouseSelection: (selection: Selection, event: MouseEvent) => {
+        setMouseSelection({ selection, event });
+      },
+      setTranslationResult: (text: string) => {
+        setTranslatedText(text);
+      },
+      reset,
+    }));
+
     return (
-      <TooltipDialog
+      <Tooltip
         mouseSelection={mouseSelection}
         translatedText={translatedText}
-        onDialogClose={onDialogClose}
+        onButtonClick={async () => {
+          const result = await translateFn(mouseSelection!.selection.text);
+          setTranslatedText(result);
+        }}
+        onDialogClose={() => reset()}
       />
     );
+  });
+
+  const tooltipRef = React.createRef<TooltipMethods>();
+
+  const reactRoot = ReactDOM.createRoot(shadowRoot);
+  reactRoot.render(<TooltipWrapper ref={tooltipRef} />);
+
+  function isInsideShadow(e: MouseEvent) {
+    return e
+      .composedPath()
+      .some((node) => (node as Element).shadowRoot === shadowRoot);
   }
 
-  return (
-    <TooltipButton
-      mouseSelection={mouseSelection}
-      onButtonClick={onButtonClick}
-    />
-  );
-}
+  let lastShowButtonTime = 0;
 
-function TooltipButton({
-  mouseSelection,
-  onButtonClick,
-}: {
-  mouseSelection: MouseSelection;
-  onButtonClick: () => void;
-}) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [width, height] = [26, 26];
-  const placement = computeButtonPlacement(mouseSelection);
-  const bounds = getViewportBounds(4);
-  const buttonX = clamp(
-    placement.x - width / 2,
-    bounds.maxLeft,
-    bounds.maxRight - width,
-  );
-  const buttonY = clamp(
-    placement.upwards ? placement.y - height : placement.y,
-    bounds.maxTop,
-    bounds.maxBottom - height,
-  );
-
-  return (
-    <button
-      type="button"
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        borderRadius: "5px",
-        backgroundColor: isHovered ? "#fefefe" : "#fafafa",
-        position: "absolute",
-        left: `${buttonX}px`,
-        top: `${buttonY}px`,
-        boxShadow: isHovered
-          ? "0px 3px 6px rgba(0, 0, 0, 0.2)"
-          : "0px 2px 4px rgba(0, 0, 0, 0.2)",
-        color: "#888",
-        fontSize: "12px",
-        cursor: "pointer",
-        textAlign: "center",
-        lineHeight: `${height}px`,
-        zIndex: "2147483647",
-        boxSizing: "border-box",
-        fontFamily: "Arial, sans-serif",
-        padding: "0",
-        border: "0",
-        visibility: "visible",
-      }}
-      disabled={isLoading}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={() => {
-        setIsLoading(true);
-        onButtonClick();
-      }}
-    >
-      {isLoading ? (
-        <div
-          style={{
-            border: "3px solid #f0f0f0",
-            borderRadius: "50%",
-            borderTop: "3px solid #3498db",
-            width: "16px",
-            height: "16px",
-            boxSizing: "border-box",
-            margin: "auto",
-            padding: "0",
-            animation: "spin 0.5s linear infinite",
-          }}
-        ></div>
-      ) : (
-        "Tr"
-      )}
-    </button>
-  );
-}
-
-function TooltipDialog({
-  mouseSelection,
-  translatedText,
-  onDialogClose,
-}: {
-  mouseSelection: MouseSelection;
-  translatedText: string;
-  onDialogClose: () => void;
-}) {
-  const placement = computeDialogPlacement(mouseSelection);
-
-  const [position, setPosition] = useState({ left: "initial", top: "initial" });
-  const [isReady, setIsReady] = useState(false);
-
-  const ref = createRef<HTMLDivElement>();
-
-  // Apply placement after the width and height are calculated
-  setTimeout(async () => {
-    if (isReady || !ref.current) {
+  async function documentMouseUpHandler(e: MouseEvent) {
+    if (isInsideShadow(e)) {
       return;
     }
-    const [left, top] = (() => {
-      const rect = ref.current.getBoundingClientRect();
-      const bounds = getViewportBounds(4);
-      const tooltipX = clamp(
-        placement.x - rect.width / 2,
-        bounds.maxLeft,
-        bounds.maxRight - rect.width,
-      );
-      const tooltipY = clamp(
-        placement.upwards ? placement.y - rect.height - 2 : placement.y + 2,
-        bounds.maxTop,
-        bounds.maxBottom - rect.height,
-      );
-      return [`${tooltipX}px`, `${tooltipY}px`];
-    })();
-    setPosition({ left, top });
-    setIsReady(true);
-  }, 1);
+    if (Date.now() - lastShowButtonTime < 100) {
+      return;
+    }
 
-  const [closeButtonState, setCloseButtonState] = useState(0);
+    // Wait for the selection to be updated
+    await new Promise((resolve) => setTimeout(resolve, 1));
 
-  return (
-    <div
-      ref={ref}
-      style={{
-        width: "auto",
-        maxWidth: "60vw",
-        position: "absolute",
-        left: position.left,
-        top: position.top,
-        backgroundColor: "white",
-        color: "black",
-        padding: "10px 14px",
-        borderRadius: "6px",
-        boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.4)",
-        zIndex: "2147483647",
-        transition: "opacity 0.5s ease",
-        fontSize: "14px",
-        fontFamily: "Arial, sans-serif",
-        opacity: isReady ? "1" : "0",
-        visibility: "visible",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "12px",
-          fontFamily: "Arial, sans-serif",
-          color: "#888",
-          display: "flex",
-          justifyContent: "space-between",
-          userSelect: "none",
-          marginBottom: "8px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "12px",
-            marginRight: "16px",
-            fontFamily: "Arial, sans-serif",
-          }}
-        >
-          Translate
-        </div>
-        <div
-          style={{
-            marginLeft: "auto",
-            cursor: "pointer",
-            fontSize: "12px",
-            width: "12px",
-            height: "12px",
-            borderRadius: "10%",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            backgroundColor: ["inherit", "#dedede", "#c0c0c0"][
-              closeButtonState
-            ],
-          }}
-          onMouseOver={() => setCloseButtonState(1)}
-          onMouseLeave={() => setCloseButtonState(0)}
-          onMouseDown={() => setCloseButtonState(2)}
-          onMouseUp={() => setCloseButtonState(1)}
-          onClick={onDialogClose}
-        >
-          &times;
-        </div>
-      </div>
-      <div
-        style={{
-          fontSize: "14px",
-          fontFamily: "Arial, sans-serif",
-          overflow: "scroll",
-          maxHeight: "50vh",
-        }}
-      >
-        {translatedText}
-      </div>
-    </div>
-  );
-}
+    const selection = getTextSelection();
+    if (selection.text.length === 0) {
+      return;
+    }
 
-function computeButtonPlacement(mouseSelection: MouseSelection): Placement {
-  const {
-    selection: { rect, offset },
-    event: { pageX, pageY },
-  } = mouseSelection;
+    tooltipRef.current!.setMouseSelection(selection, e);
 
-  let y = pageY,
-    upwards = false;
-  if (rect !== null) {
-    upwards =
-      Math.abs(pageY - (rect.top + offset.y)) <
-      Math.abs(pageY - (rect.bottom + offset.y));
-    y = (upwards ? rect.top - 1 : rect.bottom + 1) + offset.y;
+    lastShowButtonTime = Date.now();
   }
 
-  return {
-    x: pageX,
-    y: y,
-    upwards: upwards,
-  };
-}
-
-function computeDialogPlacement(mouseSelection: MouseSelection): Placement {
-  const {
-    selection: { rect, offset },
-    event: { pageX, pageY },
-  } = mouseSelection;
-
-  let x = pageX,
-    y = pageY,
-    upwards = false;
-  if (rect !== null) {
-    upwards =
-      Math.abs(pageY - (rect.top + offset.y)) <
-      Math.abs(pageY - (rect.bottom + offset.y));
-    x = (rect.left + rect.right) / 2 + offset.x;
-    y = (upwards ? rect.top : rect.bottom) + offset.y;
+  function documentMouseDownHandler(e: MouseEvent) {
+    if (isInsideShadow(e)) {
+      return;
+    }
+    tooltipRef.current!.reset();
   }
+
+  document.addEventListener("mouseup", documentMouseUpHandler);
+  document.addEventListener("mousedown", documentMouseDownHandler);
+
   return {
-    x: x,
-    y: y,
-    upwards: upwards,
+    hide() {
+      tooltipRef.current!.reset();
+    },
+    cleanup() {
+      document.removeEventListener("mouseup", documentMouseUpHandler);
+      document.removeEventListener("mousedown", documentMouseDownHandler);
+
+      reactRoot.unmount();
+      container.remove();
+    },
   };
-}
-
-function getViewportBounds(padSize: number) {
-  return {
-    maxLeft: window.scrollX + padSize,
-    maxRight: window.scrollX + window.innerWidth - padSize,
-    maxTop: window.scrollY + 4,
-    maxBottom: window.scrollY + window.innerHeight - padSize,
-  };
-}
-
-// function getPageBounds() {
-//   const padSize = 4;
-//   return {
-//     maxLeft: 0 + padSize,
-//     maxRight: document.documentElement.scrollWidth - padSize,
-//     maxTop: 0 + padSize,
-//     maxBottom: document.documentElement.scrollHeight - padSize,
-//   };
-// }
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
